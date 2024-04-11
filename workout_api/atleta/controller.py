@@ -1,7 +1,10 @@
+from collections.abc import Sequence
 from datetime import datetime
+from typing import Tuple
 from uuid import uuid4
 from fastapi import APIRouter, Body, HTTPException, status
 from pydantic import UUID4
+from sqlalchemy import Select
 
 from workout_api.atleta.schemas import AtletaIn, AtletaOut, AtletaUpdate
 from workout_api.atleta.models import AtletaModel
@@ -69,8 +72,13 @@ async def post(
     status_code=status.HTTP_200_OK,
     response_model=list[AtletaOut],
 )
-async def query(db_session: DatabaseDependency) -> list[AtletaOut]:
-    atletas: list[AtletaOut] = (await db_session.execute(select(AtletaModel))).scalars().all()
+async def query(db_session: DatabaseDependency, name: str = "", cpf: str = "") -> list[AtletaOut]:
+    query: Select[Tuple[AtletaModel]]= select(AtletaModel)
+    if name != "":
+        query = query.where(AtletaModel.nome == name)
+    if cpf != "":
+        query = query.where(AtletaModel.cpf == cpf)
+    atletas: Sequence[AtletaModel] = (await db_session.execute(query)).scalars().all()
     
     return [AtletaOut.model_validate(atleta) for atleta in atletas]
 
