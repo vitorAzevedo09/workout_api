@@ -1,12 +1,12 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Tuple
 from uuid import uuid4
 from fastapi import APIRouter, Body, HTTPException, status
 from pydantic import UUID4
-from sqlalchemy import Select
+from sqlalchemy import Select, exists
 
-from workout_api.atleta.schemas import AtletaIn, AtletaOut, AtletaUpdate
+from workout_api.atleta.schemas import Atleta, AtletaIn, AtletaOut, AtletaThinOut, AtletaUpdate
 from workout_api.atleta.models import AtletaModel
 from workout_api.categorias.models import CategoriaModel
 from workout_api.centro_treinamento.models import CentroTreinamentoModel
@@ -48,8 +48,15 @@ async def post(
             status_code=status.HTTP_400_BAD_REQUEST, 
             detail=f'O centro de treinamento {centro_treinamento_nome} não foi encontrado.'
         )
+    atleta_exists = await db_session.execute(select(AtletaModel).where(AtletaModel.cpf == atleta_in.cpf))
+    if atleta_exists:
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER, 
+            detail=f'Já existe um atleta cadastrado com o cpf: {atleta_in.cpf}'
+        )
+        
     try:
-        atleta_out = AtletaOut(id=uuid4(), created_at=datetime.utcnow(), **atleta_in.model_dump())
+        atleta_out = AtletaOut(id=uuid4(), created_at=datetime.now(UTC), **atleta_in.model_dump())
         atleta_model = AtletaModel(**atleta_out.model_dump(exclude={'categoria', 'centro_treinamento'}))
 
         atleta_model.categoria_id = categoria.pk_id
@@ -70,9 +77,9 @@ async def post(
     '/', 
     summary='Consultar todos os Atletas',
     status_code=status.HTTP_200_OK,
-    response_model=list[AtletaOut],
+    response_model=list[AtletaThinOut],
 )
-async def query(db_session: DatabaseDependency, name: str = "", cpf: str = "") -> list[AtletaOut]:
+async def query(db_session: DatabaseDependency, name: str = "", cpf: str = "") -> list[AtletaThinOut]:
     query: Select[Tuple[AtletaModel]]= select(AtletaModel)
     if name != "":
         query = query.where(AtletaModel.nome == name)
@@ -80,7 +87,7 @@ async def query(db_session: DatabaseDependency, name: str = "", cpf: str = "") -
         query = query.where(AtletaModel.cpf == cpf)
     atletas: Sequence[AtletaModel] = (await db_session.execute(query)).scalars().all()
     
-    return [AtletaOut.model_validate(atleta) for atleta in atletas]
+    return [AtletaThinOut.model_validate(atleta) for atleta in atletas]
 
 
 @router.get(
