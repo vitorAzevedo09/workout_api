@@ -3,6 +3,7 @@ from datetime import datetime, UTC
 from typing import Tuple
 from uuid import uuid4
 from fastapi import APIRouter, Body, HTTPException, status
+from fastapi_pagination import Page, paginate
 from pydantic import UUID4
 from sqlalchemy import Select, exists
 
@@ -77,7 +78,7 @@ async def post(
     '/', 
     summary='Consultar todos os Atletas',
     status_code=status.HTTP_200_OK,
-    response_model=list[AtletaThinOut],
+    response_model=Page[AtletaThinOut],
 )
 async def query(db_session: DatabaseDependency, name: str = "", cpf: str = "") -> list[AtletaThinOut]:
     query: Select[Tuple[AtletaModel]]= select(AtletaModel)
@@ -87,7 +88,7 @@ async def query(db_session: DatabaseDependency, name: str = "", cpf: str = "") -
         query = query.where(AtletaModel.cpf == cpf)
     atletas: Sequence[AtletaModel] = (await db_session.execute(query)).scalars().all()
     
-    return [AtletaThinOut.model_validate(atleta) for atleta in atletas]
+    return paginate([AtletaThinOut.model_validate(atleta) for atleta in atletas])
 
 
 @router.get(
